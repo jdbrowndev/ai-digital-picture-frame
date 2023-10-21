@@ -1,0 +1,20 @@
+{
+  "name": "ai-digital-picture-frame",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Jordan Brown",
+  "license": "ISC",
+  "dependencies": {
+    "@azure/app-configuration": "^1.4.1",
+    "@azure/identity": "^3.3.2",
+    "@azure/keyvault-secrets": "^4.7.0",
+    "@azure/storage-blob": "^12.16.0",
+    "imagemin": "^8.0.1",
+    "imagemin-pngquant": "^9.0.2",
+    "openai": "^4.12.4"
+  }
+}
