@@ -4,6 +4,7 @@ const azureIdentity = require("@azure/identity");
 const appConfig = require("@azure/app-configuration");
 const keyVault = require("@azure/keyvault-secrets");
 const storageBlob = require("@azure/storage-blob");
+const azureCommunication = require("@azure/communication-email");
 
 const OpenAI = require("openai");
 const imageminPng = require("imagemin-pngquant");
@@ -19,7 +20,7 @@ const imageminPng = require("imagemin-pngquant");
 	for (const image of images) {
 		await uploadToStorage(containerClient, image);
 		await compressImage(imagemin, image);
-		// todo email compressed image
+		await emailImage(image, configuration, azureCredential);
 	}
 })();
 
@@ -28,12 +29,14 @@ async function getConfiguration(azureCredential) {
 	
 	const { value: openAIPrompt } = await appConfigClient.getConfigurationSetting({ key: "OpenAIPrompt" });
 	const { value: openAISecretKey } = await getOpenAISecretKey(appConfigClient, azureCredential);
+	const { value: senderEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "SenderEmailAddress" });
 	const { value: pictureFrameEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "PictureFrameEmailAddress" });
 	const { value: numberOfImagesToGenerate } = await appConfigClient.getConfigurationSetting({ key: "NumberOfImagesToGenerate" });
 
 	return {
 		openAIPrompt,
 		openAISecretKey,
+		senderEmailAddress,
 		pictureFrameEmailAddress,
 		numberOfImagesToGenerate: Number(numberOfImagesToGenerate)
 	};
@@ -71,6 +74,18 @@ async function generateImages(configuration) {
 	return images;
 }
 
+function getContainerClient(azureCredential) {
+	const blobServiceClient = new storageBlob.BlobServiceClient("https://storageaccount23487.blob.core.windows.net", azureCredential);
+	const containerClient = blobServiceClient.getContainerClient("ai-generated-images");
+	return containerClient;
+}
+
+async function uploadToStorage(containerClient, image) {
+	const blockBlobClient = containerClient.getBlockBlobClient(image.name);
+	const buffer = Buffer.from(image.base64, "base64");
+	await blockBlobClient.upload(buffer, buffer.length);
+}
+
 async function compressImage(imagemin, image) {
 	const buffer = Buffer.from(image.base64, "base64");
 
@@ -83,14 +98,31 @@ async function compressImage(imagemin, image) {
 	image.compressedBase64 = compressedBuffer.toString("base64");
 }
 
-function getContainerClient(azureCredential) {
-	const blobServiceClient = new storageBlob.BlobServiceClient("https://storageaccount23487.blob.core.windows.net", azureCredential);
-	const containerClient = blobServiceClient.getContainerClient("ai-generated-images");
-	return containerClient;
-}
-
-async function uploadToStorage(containerClient, image) {
-	const blockBlobClient = containerClient.getBlockBlobClient(image.name);
-	const buffer = Buffer.from(image.base64, "base64");
-	await blockBlobClient.upload(buffer, buffer.length);
+async function emailImage(image, configuration, azureCredential) {
+	const emailClient = new azureCommunication.EmailClient("https://communication-service-6293.unitedstates.communication.azure.com", azureCredential);
+	const message = {
+		senderAddress: configuration.senderEmailAddress,
+		content: {
+			subject: "Image for Picture Frame",
+			plainText: "Image is attached."
+		},
+		recipients: {
+			to: [
+				{
+					address: configuration.pictureFrameEmailAddress,
+					displayName: "Picture Frame"
+				}
+			]
+		},
+		attachments: [
+			{
+				name: image.name,
+				contentType: "image/png",
+				contentInBase64: image.compressedBase64
+			}
+		]
+	};
+	  
+	const poller = await emailClient.beginSend(message);
+	await poller.pollUntilDone();  
 }
