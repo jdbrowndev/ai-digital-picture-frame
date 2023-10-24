@@ -8,6 +8,7 @@ const azureCommunication = require("@azure/communication-email");
 
 const OpenAI = require("openai");
 const imageminPng = require("imagemin-pngquant");
+const sharp = require("sharp");
 
 (async function() {
 	const azureCredential = new azureIdentity.DefaultAzureCredential();
@@ -20,6 +21,7 @@ const imageminPng = require("imagemin-pngquant");
 	for (const image of images) {
 		await uploadToStorage(containerClient, image);
 		await compressImage(imagemin, image);
+		await resizeImage(image);
 		await emailImage(image, configuration, azureCredential);
 	}
 })();
@@ -98,6 +100,17 @@ async function compressImage(imagemin, image) {
 	image.compressedBase64 = compressedBuffer.toString("base64");
 }
 
+async function resizeImage(image) {
+	const inputBuffer = Buffer.from(image.compressedBase64, "base64");
+
+	const outputBuffer = await sharp(inputBuffer)
+		.resize(1280, 800)
+		.png()
+		.toBuffer();
+
+	image.resizedBase64 = outputBuffer.toString("base64");
+}
+
 async function emailImage(image, configuration, azureCredential) {
 	const emailClient = new azureCommunication.EmailClient("https://communication-service-6293.unitedstates.communication.azure.com", azureCredential);
 	const message = {
@@ -118,7 +131,7 @@ async function emailImage(image, configuration, azureCredential) {
 			{
 				name: image.name,
 				contentType: "image/png",
-				contentInBase64: image.compressedBase64
+				contentInBase64: image.resizedBase64
 			}
 		]
 	};
