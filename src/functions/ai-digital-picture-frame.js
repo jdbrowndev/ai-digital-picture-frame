@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 
+const { app } = require('@azure/functions');
 const azureIdentity = require("@azure/identity");
 const appConfig = require("@azure/app-configuration");
 const keyVault = require("@azure/keyvault-secrets");
@@ -10,27 +11,41 @@ const OpenAI = require("openai");
 const imageminPng = require("imagemin-pngquant");
 const sharp = require("sharp");
 
-(async function() {
-	const azureCredential = new azureIdentity.DefaultAzureCredential();
-	const configuration = await getConfiguration(azureCredential);
-	
-	const imagemin = (await import('imagemin')).default;
-	const containerClient = getContainerClient(azureCredential);
-	
-	const images = await generateImages(configuration);
-	for (const image of images) {
-		await uploadToStorage(containerClient, image);
-		await compressImage(imagemin, image);
-		await resizeImage(image);
-		await emailImage(image, configuration, azureCredential);
-	}
-})();
+app.timer("ai-digital-picture-frame", {
+    schedule: "0 * * * * *",
+    handler: async (myTimer, context) => {
+        try {
+            context.log("ai-digital-picture-frame function running...");
+            
+            const azureCredential = new azureIdentity.DefaultAzureCredential();
+            const configuration = await getConfiguration(azureCredential);
+            
+            const imagemin = (await import('imagemin')).default;
+            const containerClient = getContainerClient(azureCredential);
+            
+            const images = await generateImages(configuration);
+            for (const image of images) {
+                await uploadToStorage(containerClient, image);
+                await compressImage(imagemin, image);
+                await resizeImage(image);
+                await emailImage(image, configuration, azureCredential);
+            }
+
+            context.log("ai-digital-picture-frame function done");
+        } catch (error) {
+            context.error(error);
+            context.log("ai-digital-picture-frame function failed, exiting");
+        }
+    },
+    useMonitor: false
+});
 
 async function getConfiguration(azureCredential) {
 	const appConfigClient = new appConfig.AppConfigurationClient("https://app-configuration-7298.azconfig.io", azureCredential);
 	
 	const { value: openAIPrompt } = await appConfigClient.getConfigurationSetting({ key: "OpenAIPrompt" });
-	const { value: openAISecretKey } = await getOpenAISecretKey(appConfigClient, azureCredential);
+	const { value: openAISecretKey } = await getSecretKey(appConfigClient, azureCredential, "OpenAISecretKey");
+	const { value: communicationServiceConnectionString } = await getSecretKey(appConfigClient, azureCredential, "CommunicationServiceConnectionString");
 	const { value: senderEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "SenderEmailAddress" });
 	const { value: pictureFrameEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "PictureFrameEmailAddress" });
 	const { value: numberOfImagesToGenerate } = await appConfigClient.getConfigurationSetting({ key: "NumberOfImagesToGenerate" });
@@ -38,20 +53,21 @@ async function getConfiguration(azureCredential) {
 	return {
 		openAIPrompt,
 		openAISecretKey,
+		communicationServiceConnectionString,
 		senderEmailAddress,
 		pictureFrameEmailAddress,
 		numberOfImagesToGenerate: Number(numberOfImagesToGenerate)
 	};
 }
 
-async function getOpenAISecretKey(appConfigClient, azureCredential) {
-	const response = await appConfigClient.getConfigurationSetting({ key: "OpenAISecretKey" });
+async function getSecretKey(appConfigClient, azureCredential, key) {
+	const response = await appConfigClient.getConfigurationSetting({ key });
 	const parsedSecretReference = appConfig.parseSecretReference(response);
 	const { name: secretName, vaultUrl } = keyVault.parseKeyVaultSecretIdentifier(parsedSecretReference.value.secretId);
 
 	const secretClient = new keyVault.SecretClient(vaultUrl, azureCredential);
-	const openAISecretKey = await secretClient.getSecret(secretName);
-	return openAISecretKey;
+	const secretKey = await secretClient.getSecret(secretName);
+	return secretKey;
 }
 
 async function generateImages(configuration) {
@@ -111,8 +127,8 @@ async function resizeImage(image) {
 	image.resizedBase64 = outputBuffer.toString("base64");
 }
 
-async function emailImage(image, configuration, azureCredential) {
-	const emailClient = new azureCommunication.EmailClient("https://communication-service-6293.unitedstates.communication.azure.com", azureCredential);
+async function emailImage(image, configuration) {
+	const emailClient = new azureCommunication.EmailClient(configuration.communicationServiceConnectionString);
 	const message = {
 		senderAddress: configuration.senderEmailAddress,
 		content: {
