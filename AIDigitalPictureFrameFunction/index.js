@@ -1,6 +1,5 @@
 const crypto = require("crypto");
 
-const { app } = require('@azure/functions');
 const azureIdentity = require("@azure/identity");
 const appConfig = require("@azure/app-configuration");
 const keyVault = require("@azure/keyvault-secrets");
@@ -11,34 +10,30 @@ const OpenAI = require("openai");
 const imageminPng = require("imagemin-pngquant");
 const sharp = require("sharp");
 
-app.timer("ai-digital-picture-frame", {
-    schedule: "0 * * * * *",
-    handler: async (myTimer, context) => {
-        try {
-            context.log("ai-digital-picture-frame function running...");
-            
-            const azureCredential = new azureIdentity.DefaultAzureCredential();
-            const configuration = await getConfiguration(azureCredential);
-            
-            const imagemin = (await import('imagemin')).default;
-            const containerClient = getContainerClient(azureCredential);
-            
-            const images = await generateImages(configuration);
-            for (const image of images) {
-                await uploadToStorage(containerClient, image);
-                await compressImage(imagemin, image);
-                await resizeImage(image);
-                await emailImage(image, configuration, azureCredential);
-            }
+module.exports = async function (context, myTimer) {
+	try {
+		context.log("ai-digital-picture-frame function running...");
+		
+		const azureCredential = new azureIdentity.DefaultAzureCredential();
+		const configuration = await getConfiguration(azureCredential);
+		
+		const imagemin = (await import('imagemin')).default;
+		const containerClient = getContainerClient(azureCredential);
+		
+		const images = await generateImages(configuration);
+		for (const image of images) {
+			await uploadToStorage(containerClient, image);
+			await compressImage(imagemin, image);
+			await resizeImage(image);
+			await emailImage(image, configuration, azureCredential);
+		}
 
-            context.log("ai-digital-picture-frame function done");
-        } catch (error) {
-            context.error(error);
-            context.log("ai-digital-picture-frame function failed, exiting");
-        }
-    },
-    useMonitor: false
-});
+		context.log("ai-digital-picture-frame function done");
+	} catch (error) {
+		context.error(error);
+		context.log("ai-digital-picture-frame function failed, exiting");
+	}
+};
 
 async function getConfiguration(azureCredential) {
 	const appConfigClient = new appConfig.AppConfigurationClient("https://app-configuration-7298.azconfig.io", azureCredential);
