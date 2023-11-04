@@ -21,7 +21,7 @@ module.exports = async function (context, myTimer) {
 		
 		const images = await generateImages(configuration);
 		for (const image of images) {
-			await uploadToStorage(containerClient, image);
+			await uploadToStorage(configuration, containerClient, image);
 			await compressImage(imagemin, image);
 			await emailImage(image, configuration, azureCredential);
 		}
@@ -91,10 +91,11 @@ function getContainerClient(azureCredential) {
 	return containerClient;
 }
 
-async function uploadToStorage(containerClient, image) {
+async function uploadToStorage(configuration, containerClient, image) {
 	const blockBlobClient = containerClient.getBlockBlobClient(image.name);
 	const buffer = Buffer.from(image.base64, "base64");
-	await blockBlobClient.upload(buffer, buffer.length);
+	const metadata = { prompt: configuration.openAIPrompt };
+	await blockBlobClient.upload(buffer, buffer.length, { metadata });
 }
 
 async function compressImage(imagemin, image) {
