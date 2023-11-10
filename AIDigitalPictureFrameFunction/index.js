@@ -28,7 +28,7 @@ module.exports = async function (context, myTimer) {
 
 		context.log("ai-digital-picture-frame function done");
 	} catch (error) {
-		context.error(error);
+		context.log.error(error);
 		context.log("ai-digital-picture-frame function failed, exiting");
 	}
 };
@@ -36,20 +36,18 @@ module.exports = async function (context, myTimer) {
 async function getConfiguration(azureCredential) {
 	const appConfigClient = new appConfig.AppConfigurationClient("https://app-configuration-7298.azconfig.io", azureCredential);
 	
-	const { value: openAIPrompt } = await appConfigClient.getConfigurationSetting({ key: "OpenAIPrompt" });
+	const { value: openAIGenerateParams } = await appConfigClient.getConfigurationSetting({ key: "OpenAIGenerateParams" });
 	const { value: openAISecretKey } = await getSecretKey(appConfigClient, azureCredential, "OpenAISecretKey");
 	const { value: communicationServiceConnectionString } = await getSecretKey(appConfigClient, azureCredential, "CommunicationServiceConnectionString");
 	const { value: senderEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "SenderEmailAddress" });
 	const { value: pictureFrameEmailAddress } = await appConfigClient.getConfigurationSetting({ key: "PictureFrameEmailAddress" });
-	const { value: numberOfImagesToGenerate } = await appConfigClient.getConfigurationSetting({ key: "NumberOfImagesToGenerate" });
 
 	return {
-		openAIPrompt,
+		openAIGenerateParams: JSON.parse(openAIGenerateParams),
 		openAISecretKey,
 		communicationServiceConnectionString,
 		senderEmailAddress,
-		pictureFrameEmailAddress,
-		numberOfImagesToGenerate: Number(numberOfImagesToGenerate)
+		pictureFrameEmailAddress
 	};
 }
 
@@ -66,12 +64,7 @@ async function getSecretKey(appConfigClient, azureCredential, key) {
 async function generateImages(configuration) {
 	const openAIClient = new OpenAI({ apiKey: configuration.openAISecretKey });
 	
-	const response = await openAIClient.images.generate({
-		prompt: configuration.openAIPrompt,
-		n: configuration.numberOfImagesToGenerate,
-		response_format: "b64_json",
-		size: "1024x1024"
-	});
+	const response = await openAIClient.images.generate(configuration.openAIGenerateParams);
 	
 	const images = response.data.map(x => {
 		const id = crypto.randomUUID();
@@ -94,7 +87,7 @@ function getContainerClient(azureCredential) {
 async function uploadToStorage(configuration, containerClient, image) {
 	const blockBlobClient = containerClient.getBlockBlobClient(image.name);
 	const buffer = Buffer.from(image.base64, "base64");
-	const metadata = { prompt: configuration.openAIPrompt };
+	const metadata = { prompt: configuration.openAIGenerateParams.prompt };
 	await blockBlobClient.upload(buffer, buffer.length, { metadata });
 }
 

@@ -15,6 +15,6 @@
     "@azure/storage-blob": "^12.16.0",
     "imagemin": "^8.0.1",
     "imagemin-pngquant": "^9.0.2",
-    "openai": "^4.12.4"
+    "openai": "^4.17.2"
   }
 }
