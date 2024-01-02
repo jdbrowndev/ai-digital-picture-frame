@@ -30,6 +30,7 @@ module.exports = async function (context, myTimer) {
 	} catch (error) {
 		context.log.error(error);
 		context.log("ai-digital-picture-frame function failed, exiting");
+		throw error;
 	}
 };
 
