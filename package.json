@@ -8,13 +8,13 @@
   "author": "Jordan Brown",
   "license": "ISC",
   "dependencies": {
-    "@azure/app-configuration": "^1.4.1",
+    "@azure/app-configuration": "^1.6.0",
     "@azure/communication-email": "^1.0.0",
-    "@azure/identity": "^3.3.2",
-    "@azure/keyvault-secrets": "^4.7.0",
-    "@azure/storage-blob": "^12.16.0",
+    "@azure/identity": "^4.1.0",
+    "@azure/keyvault-secrets": "^4.8.0",
+    "@azure/storage-blob": "^12.17.0",
     "imagemin": "^8.0.1",
     "imagemin-pngquant": "^9.0.2",
-    "openai": "^4.17.2"
+    "openai": "^4.38.5"
   }
 }
